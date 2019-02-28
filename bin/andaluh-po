@@ -1,0 +1,83 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+# vim: ts=4
+###
+#
+# Copyright (c) 2018-2019 Andalugeeks
+# Authors:
+# - J. Félix Ontañón <felixonta@gmail.com>
+
+import datetime
+import polib
+import copy
+
+from string import Template
+import andaluh
+
+LANGUAGE = u'es_an'
+LAST_TRANS = u'J. Félix Ontañón <felixonta@gmail.com>'
+LANG_TEAM = u'Andalugeeks <info@andalugeeks.com>'
+HEADERS_TEMPLATE = Template(u'''Andalûh EPA translation of $package.
+Copyright (C) 2018 $package's COPYRIGHT HOLDER.
+This package is distributed under the same license as the $package package.
+$langteam
+$lasttrans
+''')
+
+def update_headers(package_name):
+    return HEADERS_TEMPLATE.substitute(
+        package = package_name, 
+        langteam = LANG_TEAM, 
+        lasttrans = LAST_TRANS
+    )
+
+def update_metadata(metadata):
+    metadata[u'Language'] = LANGUAGE
+    metadata[u'Language-Team'] = LANG_TEAM
+    metadata[u'Last-Translator'] = LAST_TRANS
+    metadata[u'PO-Revision-Date'] = datetime.datetime.now().isoformat()
+
+    return metadata
+
+def translate(orig):
+    dest = polib.POFile()
+
+    for item in orig:
+        entry = copy.deepcopy(item)
+
+        if not entry.msgstr:
+            if hasattr(entry, "msgstr_plural") and entry.msgstr_plural:
+                entry.msgstr_plural = {k: andaluh.epa(v) for k, v in entry.msgstr_plural.items()}
+            else:
+                pass # Is there anything else to try?
+        else:
+            entry.msgstr = andaluh.epa(item.msgstr)
+
+        dest.append(entry)
+
+    return dest
+
+if __name__ == '__main__':
+    import sys
+    import os, os.path
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Transliterate español (spanish) gettext po files to andaluz spelling proposals. Generates po and mo files.')
+    parser.add_argument('po', type=str, default=None, help='the original po file to transliterate')
+    parser.add_argument('-d', '--dest', type=str, default=os.getcwd(), help='destination path of the transliterated po and mo files, defaults to cwd')
+
+    args = parser.parse_args()
+    orig_filepath = args.po
+    orig_filename = os.path.basename(orig_filepath)
+    dest_path = args.dest
+
+    orig = polib.pofile(orig_filepath)
+    package_name = os.path.splitext(orig_filename)[0]
+
+    dest = translate(orig)
+    dest.metadata = update_metadata(orig.metadata)
+    dest.header = update_headers(package_name)
+
+    dest.save(os.path.join(dest_path, orig_filename))
+    dest.save_as_mofile(os.path.join(dest_path, package_name + '.mo'))
+    sys.exit(0)
